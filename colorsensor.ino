@@ -4,6 +4,8 @@
  * 
  * 2019 by Raymond Blum <raygeeknyc@gmail.com>.
  */
+// _DEBUG for serial output
+#define _NODEBUG
 
 #define R_SENSOR_PIN A3
 #define G_SENSOR_PIN A4
@@ -14,31 +16,42 @@
 #define B_LED_PIN 10
 
 #define TRAINING_MS 3000
+#define SCALING_MULTIPLIER 2.0
 
 unsigned int sensor_min, sensor_max;
 // There's some language issues with using min and max functions - this is an easy workaround
 inline int min_i(int a,int b) {return ((a)<(b)?(a):(b)); }
 inline int max_i(int a,int b) {return ((a)>(b)?(a):(b)); }
 
-// Recaord the highest and lowest sensor readings in a number of seconds and take those as our range
+void setSensorMax(const int reading) {
+  sensor_max = max_i(sensor_max, reading);
+}
+
+// Recaord the highest sensor reading in a number of seconds to use as the initial scaling ceiling
 void trainSensors() {
   unsigned long int start_at = millis();
   unsigned long int end_at = start_at + TRAINING_MS;
 
-  sensor_min = 9999;
+  sensor_min = 0;
   sensor_max = 0;
   
+  #ifdef  _DEBUG
+  Serial.println("training sensors");
+  #endif
+  
   while (millis() < end_at and millis() >= start_at) {
-    int t = analogRead(R_SENSOR_PIN);
-    
-    sensor_min = min_i(sensor_min, t);
-    sensor_min = min_i(sensor_min, t);
-    sensor_min = min_i(sensor_min, analogRead(B_SENSOR_PIN));
-      
-    sensor_max = max_i(sensor_max, analogRead(R_SENSOR_PIN));
-    sensor_max = max_i(sensor_max, analogRead(G_SENSOR_PIN));
-    sensor_max = max_i(sensor_max, analogRead(B_SENSOR_PIN));
+    setSensorMax(analogRead(R_SENSOR_PIN));
+    setSensorMax(analogRead(G_SENSOR_PIN));
+    setSensorMax(analogRead(B_SENSOR_PIN));
   }
+  
+  #ifdef  _DEBUG
+  Serial.print("/trained sensors ");
+  Serial.print("min: ");
+  Serial.print(sensor_min);
+  Serial.print(" max: ");
+  Serial.println(sensor_max);
+  #endif
 }
 
 unsigned int scaleValue(const int raw_value, const int input_min, const int input_max) {
@@ -48,9 +61,11 @@ unsigned int scaleValue(const int raw_value, const int input_min, const int inpu
 }
 
 void setup() {
+  #ifdef  _DEBUG
   Serial.begin(115200);
   Serial.println("setup");
-
+  #endif
+  
   pinMode(R_SENSOR_PIN, INPUT);
   pinMode(G_SENSOR_PIN, INPUT);
   pinMode(B_SENSOR_PIN, INPUT);
@@ -75,15 +90,11 @@ void setup() {
   analogWrite(G_LED_PIN, 0);
   analogWrite(B_LED_PIN, 0);
 
-  Serial.println("training sensors");
   trainSensors();
-  Serial.print("/trained sensors ");
-  Serial.print("min: ");
-  Serial.print(sensor_min);
-  Serial.print(" max: ");
-  Serial.println(sensor_max);
-  
+
+  #ifdef _DEBUG
   Serial.println("/setup");
+  #endif
 }
 
 void showLeds() {
@@ -95,6 +106,11 @@ void showLeds() {
   unsigned int g_o = scaleValue(g_i, sensor_min, sensor_max);
   unsigned int b_o = scaleValue(b_i, sensor_min, sensor_max);
 
+  analogWrite(R_LED_PIN, r_o);
+  analogWrite(G_LED_PIN, g_o);
+  analogWrite(B_LED_PIN, b_o);
+
+  #ifdef _DEBUG
   Serial.print(r_i);
   Serial.print(",");
   Serial.print(g_i);
@@ -107,10 +123,7 @@ void showLeds() {
   Serial.print(",");
   Serial.print(b_o);
   Serial.println();
-
-  analogWrite(R_LED_PIN, r_o);
-  analogWrite(G_LED_PIN, g_o);
-  analogWrite(B_LED_PIN, b_o);
+  #endif
 }
 void loop() {
   showLeds();
