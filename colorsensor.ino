@@ -1,5 +1,5 @@
 /**
- * Use 3 CDS photosensors to read light color evels and PWM connected RGB LED to reflect the color.
+ * Use 3 CDS photosensors to read light color levels and PWM connected RGB LED to reflect the color.
  * Written for an Teensy 4.0.
  * 
  * 2019 by Raymond Blum <raygeeknyc@gmail.com>.
