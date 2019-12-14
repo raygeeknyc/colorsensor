@@ -5,7 +5,7 @@
  * 2019 by Raymond Blum <raygeeknyc@gmail.com>.
  */
 // _DEBUG for serial output
-#define _NODEBUG
+#define _DEBUG
 
 #define R_SENSOR_PIN A3
 #define G_SENSOR_PIN A4
@@ -16,7 +16,6 @@
 #define B_LED_PIN 10
 
 #define TRAINING_MS 3000
-#define SCALING_MULTIPLIER 2.0
 
 unsigned int sensor_min, sensor_max;
 // There's some language issues with using min and max functions - this is an easy workaround
@@ -27,31 +26,23 @@ void setSensorMax(const int reading) {
   sensor_max = max_i(sensor_max, reading);
 }
 
+void setSensorMin(const int reading) {
+  sensor_min = min_i(sensor_min, reading);
+}
+
 // Recaord the highest sensor reading in a number of seconds to use as the initial scaling ceiling
 void trainSensors() {
-  unsigned long int start_at = millis();
-  unsigned long int end_at = start_at + TRAINING_MS;
 
-  sensor_min = 0;
-  sensor_max = 0;
-  
-  #ifdef  _DEBUG
-  Serial.println("training sensors");
-  #endif
-  
-  while (millis() < end_at and millis() >= start_at) {
-    setSensorMax(analogRead(R_SENSOR_PIN));
-    setSensorMax(analogRead(G_SENSOR_PIN));
-    setSensorMax(analogRead(B_SENSOR_PIN));
-  }
-  
-  #ifdef  _DEBUG
-  Serial.print("/trained sensors ");
-  Serial.print("min: ");
-  Serial.print(sensor_min);
-  Serial.print(" max: ");
-  Serial.println(sensor_max);
-  #endif
+  unsigned int r = analogRead(R_SENSOR_PIN);
+  unsigned int g = analogRead(G_SENSOR_PIN);
+  unsigned int b = analogRead(B_SENSOR_PIN);
+
+  setSensorMin(r);
+  setSensorMax(r);
+  setSensorMin(g);
+  setSensorMax(g);
+  setSensorMin(b);
+  setSensorMax(b);
 }
 
 unsigned int scaleValue(const int raw_value, const int input_min, const int input_max) {
@@ -90,7 +81,24 @@ void setup() {
   analogWrite(G_LED_PIN, 0);
   analogWrite(B_LED_PIN, 0);
 
-  trainSensors();
+  #ifdef  _DEBUG
+  Serial.println("training sensors");
+  #endif
+
+  unsigned long int start_at = millis();
+  unsigned long int end_at = start_at + TRAINING_MS;
+  sensor_min = 1024;
+  sensor_max = 0;
+  while (millis() < end_at and millis() >= start_at) {
+    trainSensors();
+  }
+  #ifdef  _DEBUG
+  Serial.print("/trained sensors ");
+  Serial.print("min: ");
+  Serial.print(sensor_min);
+  Serial.print(" max: ");
+  Serial.println(sensor_max);
+  #endif
 
   #ifdef _DEBUG
   Serial.println("/setup");
@@ -126,6 +134,8 @@ void showLeds() {
   #endif
 }
 void loop() {
+    trainSensors();
+
   showLeds();
   delay(100);
 }
