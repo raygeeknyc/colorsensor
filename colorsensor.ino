@@ -25,6 +25,7 @@
 #define SENSOR_MAX 1024
 #define SENSOR_MIN 0
 
+#define POLLING_DELAY_MS 100
 
 unsigned int sensor_min, r_min, g_min, b_min;
 unsigned int sensor_max, r_max, g_max, b_max;
@@ -66,12 +67,6 @@ void trainSensors() {
   setSensorMax(g);
   setSensorMin(b);
   setSensorMax(b);
-}
-
-unsigned int scaleValue(const int raw_value, const int input_min, const int input_max) {
-  #define OUTPUT_MAX 255
-  
-  return int(float(OUTPUT_MAX) * (float(raw_value - input_min) / (input_max - input_min)));
 }
 
 void setup() {
@@ -129,14 +124,14 @@ void setup() {
   #endif
 }
 
-bool is_max(int test_i, int control_1, int control_2) {
+bool is_max(const int test_i, const int control_1, const int control_2) {
   if (((test_i - control_1) > CHANNEL_DELTA_THRESHOLD) || ((test_i - control_2) > CHANNEL_DELTA_THRESHOLD))
     return true;
   else
     return false;
 }
 
-bool is_min(int test_i, int control_1, int control_2) {
+bool is_min(const int test_i, const int control_1, const int control_2) {
   if (((control_1 - test_i) > CHANNEL_DELTA_THRESHOLD) || ((control_2 - test_i) > CHANNEL_DELTA_THRESHOLD))
     return true;
   else
@@ -230,5 +225,5 @@ void showLeds() {
 
 void loop() {
   showLeds();
-  delay(100);
+  delay(POLLING_DELAY_MS);
 }
