@@ -17,11 +17,18 @@
 
 #define TRAINING_MS 3000
 
-#define CHANNEL_DELTA_THRESHOLD_PERCENT 20.0
+#define CHANNEL_DELTA_THRESHOLD 100
 
-unsigned int sensor_min, sensor_max;
+#define LED_MIN 1
+#define LED_MAX 250
 
-unsigned int scaled_channel_delta_threshold;
+#define SENSOR_MAX 1024
+#define SENSOR_MIN 0
+
+
+unsigned int sensor_min, r_min, g_min, b_min;
+unsigned int sensor_max, r_max, g_max, b_max;
+
 
 // There's some language issues with using min and max functions - this is an easy workaround
 inline int min_i(int a,int b) {return ((a)<(b)?(a):(b)); }
@@ -36,17 +43,23 @@ void setSensorMin(const int reading) {
 }
 
 // Recaord the highest sensor reading in a number of seconds to use as the initial scaling ceiling
-void trainSensors() {
-
+void trainSensors() {  
   unsigned int r = analogRead(R_SENSOR_PIN);
   unsigned int g = analogRead(G_SENSOR_PIN);
   unsigned int b = analogRead(B_SENSOR_PIN);
 
+  r_min = min_i(r, r_min);
+  r_max = max_i(r, r_max);
+  
+  g_min = min_i(g, g_min);
+  g_max = max_i(g, g_max);
+  
+  b_min = min_i(b, b_min);
+  b_max = max_i(b, b_max);
+  
   unsigned min_reading = min_i(r,min_i(g,b));
   unsigned max_reading = max_i(r,max_i(g,b));
-  
-  scaled_channel_delta_threshold = int(float(max_reading - min_reading) * (CHANNEL_DELTA_THRESHOLD_PERCENT/ 100));
-  
+    
   setSensorMin(r);
   setSensorMax(r);
   setSensorMin(g);
@@ -67,6 +80,9 @@ void setup() {
   Serial.println("setup");
   #endif
   
+  sensor_min = r_min = g_min = b_min = SENSOR_MAX;
+  sensor_max = r_max = g_max = b_max = SENSOR_MIN;
+
   pinMode(R_SENSOR_PIN, INPUT_PULLDOWN);
   pinMode(G_SENSOR_PIN, INPUT_PULLDOWN);
   pinMode(B_SENSOR_PIN, INPUT_PULLDOWN);
@@ -97,8 +113,6 @@ void setup() {
 
   unsigned long int start_at = millis();
   unsigned long int end_at = start_at + TRAINING_MS;
-  sensor_min = 1024;
-  sensor_max = 0;
   while (millis() < end_at and millis() >= start_at) {
     trainSensors();
   }
@@ -115,63 +129,91 @@ void setup() {
   #endif
 }
 
-bool delta_over_both_threshold(const int test_channel, const int comparator_1, const int comparator_2, const int delta_threshold) {
-  if (test_channel < (comparator_1 - delta_threshold) && test_channel < (comparator_2 - delta_threshold)) {
+bool is_max(int test_i, int control_1, int control_2) {
+  if (((test_i - control_1) > CHANNEL_DELTA_THRESHOLD) || ((test_i - control_2) > CHANNEL_DELTA_THRESHOLD))
     return true;
-  } else {
+  else
     return false;
-  }
 }
 
-bool delta_over_either_threshold(const int test_channel, const int comparator_1, const int comparator_2, const int delta_threshold) {
-  if (test_channel < (comparator_1 - delta_threshold) || test_channel < (comparator_2 - delta_threshold)) {
+bool is_min(int test_i, int control_1, int control_2) {
+  if (((control_1 - test_i) > CHANNEL_DELTA_THRESHOLD) || ((control_2 - test_i) > CHANNEL_DELTA_THRESHOLD))
     return true;
-  } else {
+  else
     return false;
-  }
+}
+
+unsigned int scale_input_to_range(const unsigned int input, const unsigned int ceiling) {
+  float ratio_to_limit = (float)input/ceiling;
+  return (unsigned int)(ratio_to_limit * sensor_max);
 }
 
 void showLeds() {
   unsigned int r_o, g_o, b_o;
   
-  unsigned int r_i = analogRead(R_SENSOR_PIN);
-  unsigned int g_i = analogRead(G_SENSOR_PIN);
-  unsigned int b_i = analogRead(B_SENSOR_PIN);
+  unsigned int r_raw = analogRead(R_SENSOR_PIN);
+  unsigned int g_raw = analogRead(G_SENSOR_PIN);
+  unsigned int b_raw = analogRead(B_SENSOR_PIN);
 
-  /* Exagerate the delta between the top color and the others, if a color is significantly below both
-  of the others, reduce it twice as much.
-  */
-  r_o = scaleValue(r_i, sensor_min, sensor_max);
-  if (delta_over_both_threshold(r_i, g_i, b_i, scaled_channel_delta_threshold)) {
-    r_o /= 4;
-  } else if (delta_over_either_threshold(r_i, g_i, b_i, scaled_channel_delta_threshold)) {
-    r_o /= 2;
-  }
+  unsigned int r_i = scale_input_to_range(r_raw, r_max);
+  unsigned int g_i = scale_input_to_range(g_raw, g_max);
+  unsigned int b_i = scale_input_to_range(b_raw, b_max);
   
-  g_o = scaleValue(g_i, sensor_min, sensor_max);
-  if (delta_over_both_threshold(g_i, r_i, b_i, scaled_channel_delta_threshold)) {
-    g_o /= 4;
-  } else if (delta_over_either_threshold(g_i, r_i, b_i, scaled_channel_delta_threshold)) {
-    g_o /= 2;
+  r_o = g_o = b_o = (LED_MAX + LED_MIN) / 5;
+
+  if (is_max(r_i, g_i, b_i)) {
+    r_o = LED_MAX;
   }
-  
-  b_o = scaleValue(b_i, sensor_min, sensor_max);
-  if (delta_over_both_threshold(b_i, r_i, g_i, scaled_channel_delta_threshold)) {
-    b_o /= 4;
-  } else if (delta_over_either_threshold(b_i, r_i, g_i, scaled_channel_delta_threshold)) {
-    b_o /= 2;
+  if (is_max(g_i, r_i, b_i)) {
+    g_o = LED_MAX;
   }
-  
-  analogWrite(R_LED_PIN, r_o);
-  analogWrite(G_LED_PIN, g_o);
-  analogWrite(B_LED_PIN, b_o);
+  if (is_max(b_i, r_i, g_i)) {
+    b_o = LED_MAX;
+  }
+
+  if (is_min(r_i, g_i, b_i)) {
+    r_o = LED_MIN;
+  }
+  if (is_min(g_i, r_i, b_i)) {
+    g_o = LED_MIN;
+  }
+  if (is_min(b_i, r_i, g_i)) {
+    b_o = LED_MIN;
+  }
 
   #ifdef _DEBUG
-  Serial.print(r_i);
+  Serial.print(r_raw); 
   Serial.print(",");
-  Serial.print(g_i);
+  Serial.print(g_raw); 
   Serial.print(",");
-  Serial.print(b_i);
+  Serial.print(b_raw); 
+  Serial.print(" : ");
+  #endif
+  
+  #ifdef _DEBUG
+  if (r_i > g_i && r_i > b_i) {
+    Serial.print('*');
+    Serial.print(r_i);
+    Serial.print('*');
+  } else {
+    Serial.print(r_i);
+  } 
+  Serial.print(",");
+  if (g_i > r_i && g_i > b_i) {
+    Serial.print('*');
+    Serial.print(g_i);
+    Serial.print('*');
+  } else {
+    Serial.print(g_i);
+  } 
+  Serial.print(",");
+  if (b_i > g_i && b_i > r_i) {
+    Serial.print('*');
+    Serial.print(b_i);
+    Serial.print('*');
+  } else {
+    Serial.print(b_i);
+  } 
   Serial.print(" : ");
   Serial.print(r_o);
   Serial.print(",");
@@ -180,10 +222,13 @@ void showLeds() {
   Serial.print(b_o);
   Serial.println();
   #endif
+  
+  analogWrite(R_LED_PIN, r_o);
+  analogWrite(G_LED_PIN, g_o);
+  analogWrite(B_LED_PIN, b_o);
 }
-void loop() {
-  trainSensors();
 
+void loop() {
   showLeds();
-  delay(50);
+  delay(100);
 }
